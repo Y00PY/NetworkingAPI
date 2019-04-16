@@ -12,7 +12,6 @@ namespace NetworkingTest
     {
         static void Main(string[] args)
         {
-
             new Thread(() =>
             {
                 new NetworkServer(1337).Start();

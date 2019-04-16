@@ -28,7 +28,7 @@ namespace Networking.Server
             IPEndPoint localEndPoint = new IPEndPoint(ipAddress, this.Port);
             this.listener = new Socket(ipAddress.AddressFamily,
                 SocketType.Stream, ProtocolType.Tcp);
-            //this.listener.ReceiveTimeout = 10000;
+            this.listener.ReceiveTimeout = 10000;
             this.listener.Bind(localEndPoint);
             this.listener.Listen(100);
             Console.WriteLine("Waiting for clients to connect...");
@@ -85,46 +85,51 @@ namespace Networking.Server
 
             ClientInfo clientInfo = (ClientInfo)res.AsyncState;
             Socket clientSocket = clientInfo.Client;
-
-            int bytesRead = clientSocket.EndReceive(res);
-
-            if (bytesRead > 0)
+            try
             {
-                Console.WriteLine("[Server] Client connected: " + ((IPEndPoint)clientSocket.RemoteEndPoint).Address);
-                clientInfo.sb.Append(Encoding.ASCII.GetString(
-                    clientInfo.buffer, 0, bytesRead));
-
-                content = clientInfo.sb.ToString();
-                if (!string.IsNullOrEmpty(content))
+                int bytesRead = clientSocket.EndReceive(res);
+                if (bytesRead > 0)
                 {
-                    Console.WriteLine($"[{((IPEndPoint)clientInfo.Client.RemoteEndPoint).Address}:{((IPEndPoint)clientInfo.Client.RemoteEndPoint).Port}] {content}");
-                }
+                    Console.WriteLine("[Server] Client connected: " + ((IPEndPoint)clientSocket.RemoteEndPoint).Address);
+                    clientInfo.sb.Append(Encoding.ASCII.GetString(
+                        clientInfo.buffer, 0, bytesRead));
 
-                clientSocket.BeginReceive(clientInfo.buffer, 0, ClientInfo.BufferSize, 0,
-               new AsyncCallback(ReadCallBack), clientInfo);
+                    content = clientInfo.sb.ToString();
+                    if (!string.IsNullOrEmpty(content))
+                    {
+                        Console.WriteLine($"[{((IPEndPoint)clientInfo.Client.RemoteEndPoint).Address}:{((IPEndPoint)clientInfo.Client.RemoteEndPoint).Port}] {content}");
+                    }
+
+                    clientSocket.BeginReceive(clientInfo.buffer, 0, ClientInfo.BufferSize, 0,
+                   new AsyncCallback(ReadCallBack), clientInfo);
+                }
+                else
+                {
+                    DisconnectClient(clientSocket);
+                }
             }
-            else
+            catch (Exception)
             {
-                for (int i = 0; i < this.Clients.Count; i++)
-                {
-                    IPEndPoint remote = this.Clients[i].RemoteEndPoint as IPEndPoint;
-
-                    if (remote?.Address == (clientSocket.RemoteEndPoint as IPEndPoint)?.Address && remote?.Port == (clientSocket.RemoteEndPoint as IPEndPoint)?.Port)
-                    {
-                        this.Clients.RemoveAt(i);
-                    }
-                    else
-                    {
-                        Console.WriteLine("An error occured");
-                    }
-                }
-
-                Console.WriteLine("[Server] Client disconnected: " + ((IPEndPoint)clientSocket.RemoteEndPoint).Address + ":" + ((IPEndPoint)clientInfo.Client.RemoteEndPoint).Port);
+                DisconnectClient(clientSocket);
             }
-
-
             Console.WriteLine("[Server] Current clients connected: " + this.Clients.Count);
         }
+
+        private void DisconnectClient(Socket clientSocket)
+        {
+            for (int i = 0; i < this.Clients.Count; i++)
+            {
+                IPEndPoint remote = this.Clients[i].RemoteEndPoint as IPEndPoint;
+
+                if (remote?.Address == (clientSocket.RemoteEndPoint as IPEndPoint)?.Address && remote?.Port == (clientSocket.RemoteEndPoint as IPEndPoint)?.Port)
+                {
+                    this.Clients.RemoveAt(i);
+                }
+            }
+
+            Console.WriteLine("[Server] Client disconnected: " + ((IPEndPoint)clientSocket.RemoteEndPoint).Address + ":" + ((IPEndPoint)clientSocket.RemoteEndPoint).Port);
+        }
+
 
         private void Send(Socket handler, String data)
         {
