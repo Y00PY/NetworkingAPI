@@ -50,7 +50,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Networking\Networking.csproj">
-      <Project>{0b5a20c9-0e85-40ef-beca-c801babb8917}</Project>
+      <Project>{c44d570f-d4df-4480-bb16-e1c193662aa4}</Project>
       <Name>Networking</Name>
     </ProjectReference>
   </ItemGroup>

@@ -23,10 +23,11 @@ namespace Networking.Server
 
         public void Start()
         {
-            Console.WriteLine("Starting server on: " + this.Port);
-            IPAddress ipAddress = IPAddress.Parse("127.0.0.1");
-            IPEndPoint localEndPoint = new IPEndPoint(ipAddress, this.Port);
-            this.listener = new Socket(ipAddress.AddressFamily,
+            IPAddress ip = Dns.Resolve(Dns.GetHostName()).AddressList[0];
+            IPEndPoint localEndPoint = new IPEndPoint(ip, this.Port);
+            Console.WriteLine("Starting server on: " + ip.ToString() + ":" + this.Port);
+
+            this.listener = new Socket(ip.AddressFamily,
                 SocketType.Stream, ProtocolType.Tcp);
             this.listener.ReceiveTimeout = 10000;
             this.listener.Bind(localEndPoint);
@@ -53,6 +54,7 @@ namespace Networking.Server
             }
             else
             {
+                //Deny connection
                 bool wasClosed = false;
                 for (int i = 0; i < this.Clients.Count; i++)
                 {
@@ -105,29 +107,29 @@ namespace Networking.Server
                 }
                 else
                 {
-                    DisconnectClient(clientSocket);
+                    DisconnectClientFromList(clientSocket);
                 }
             }
             catch (Exception)
             {
-                DisconnectClient(clientSocket);
+                DisconnectClientFromList(clientSocket);
             }
             Console.WriteLine("[Server] Current clients connected: " + this.Clients.Count);
         }
 
-        private void DisconnectClient(Socket clientSocket)
+        private void DisconnectClientFromList(Socket clientSocket)
         {
             for (int i = 0; i < this.Clients.Count; i++)
             {
                 IPEndPoint remote = this.Clients[i].RemoteEndPoint as IPEndPoint;
 
-                if (remote?.Address == (clientSocket.RemoteEndPoint as IPEndPoint)?.Address && remote?.Port == (clientSocket.RemoteEndPoint as IPEndPoint)?.Port)
+                if (remote?.Address.ToString() == (clientSocket.RemoteEndPoint as IPEndPoint)?.Address.ToString())
                 {
                     this.Clients.RemoveAt(i);
+                    Console.WriteLine("[Server] Client disconnected: " + ((IPEndPoint)clientSocket.RemoteEndPoint).Address + ":" + ((IPEndPoint)clientSocket.RemoteEndPoint).Port);
+                    clientSocket.Close();
                 }
             }
-
-            Console.WriteLine("[Server] Client disconnected: " + ((IPEndPoint)clientSocket.RemoteEndPoint).Address + ":" + ((IPEndPoint)clientSocket.RemoteEndPoint).Port);
         }
 
 
