@@ -29,7 +29,6 @@ namespace Networking.Server
 
             this.listener = new Socket(ip.AddressFamily,
                 SocketType.Stream, ProtocolType.Tcp);
-            this.listener.ReceiveTimeout = 10000;
             this.listener.Bind(localEndPoint);
             this.listener.Listen(100);
             Console.WriteLine("Waiting for clients to connect...");
@@ -48,32 +47,29 @@ namespace Networking.Server
             ClientInfo clientInfo = new ClientInfo();
             clientInfo.Client = clientSocket;
 
-            if (this.Clients.Count == 0)
-            {
-                this.Clients.Add(clientSocket);
-            }
-            else
+            if (this.Clients.Count > 0)
             {
                 //Deny connection
-                bool wasClosed = false;
+                bool found = false;
                 for (int i = 0; i < this.Clients.Count; i++)
                 {
                     IPEndPoint remote = this.Clients[i].RemoteEndPoint as IPEndPoint;
 
                     if ((remote?.Address.ToString() == (clientSocket.RemoteEndPoint as IPEndPoint)?.Address.ToString()))
                     {
-                        clientSocket.Close();
-                        wasClosed = true;
+                        found = true;
                         break;
                     }
                 }
 
-                if (wasClosed)
+                if (found)
                 {
                     allDone.Set();
                     return;
                 }
             }
+
+            this.Clients.Add(clientSocket);
 
             clientSocket.BeginReceive(clientInfo.buffer, 0, ClientInfo.BufferSize, 0,
                new AsyncCallback(ReadCallBack), clientInfo);
