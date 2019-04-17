@@ -43,7 +43,7 @@ namespace Networking.Client
             }
         }
 
-        public void Send(byte[] buffer)
+        public bool Send(byte[] buffer)
         {
             if (this.tcpClient.Connected)
             {
@@ -51,11 +51,17 @@ namespace Networking.Client
                 {
                     this.tcpClient.GetStream().Write(buffer, 0, buffer.Length);
                     this.tcpClient.GetStream().Flush();
+                    return true;
                 }
                 catch (Exception)
                 {
                     Console.WriteLine("[Client] Failed to send packet: " + Encoding.ASCII.GetString(buffer));
+                    return false;
                 }
+            }
+            else
+            {
+                return false;
             }
         }
 
