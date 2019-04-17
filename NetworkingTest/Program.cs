@@ -1,4 +1,5 @@
-﻿using Networking.Server;
+﻿using Networking.Client;
+using Networking.Server;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,16 +12,26 @@ namespace NetworkingTest
     {
         static void Main(string[] args)
         {
-            new NetworkServer(1337).Start();
+            new Thread(() =>
+            {
+                new NetworkServer(1337).Start();
+            }).Start();
 
-            //NetworkClient client = new NetworkClient("127.0.0.1", 1337);
-            //Thread.Sleep(1000);
-            //client.Connect();
-            //Thread.Sleep(1000);
-            //client.Send(Encoding.ASCII.GetBytes("test-msg"));
-            //Thread.Sleep(1000);
-            //client.Disconnect();
-            while (true) ;
+            new Thread(() =>
+            {
+                NetworkClient client = new NetworkClient("10.9.242.100", 1337);
+                client.Connect();
+                while (true)
+                {
+                    Thread.Sleep(5000);
+                    client.Send(Encoding.ASCII.GetBytes("keep-alive"));
+                }
+            }).Start();
+
+            while (true)
+            {
+                Thread.Sleep(500);
+            }
         }
     }
 }

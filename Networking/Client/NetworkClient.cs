@@ -45,10 +45,17 @@ namespace Networking.Client
 
         public void Send(byte[] buffer)
         {
-            if (Connected)
+            if (this.tcpClient.Connected)
             {
-                this.tcpClient.GetStream().Write(buffer, 0, buffer.Length);
-                this.tcpClient.GetStream().Flush();
+                try
+                {
+                    this.tcpClient.GetStream().Write(buffer, 0, buffer.Length);
+                    this.tcpClient.GetStream().Flush();
+                }
+                catch (Exception)
+                {
+                    Console.WriteLine("[Client] Failed to send packet: " + Encoding.ASCII.GetString(buffer));
+                }
             }
         }
 

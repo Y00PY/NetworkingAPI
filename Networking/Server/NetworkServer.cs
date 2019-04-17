@@ -4,12 +4,14 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Networking.Server
 {
     public class NetworkServer : IDisposable
     {
-        public List<Socket> Clients { get; private set; }
+        public const long KEEPALIVE_TIMEOUT = 10000;
+        public List<ClientInfo> Clients { get; private set; }
         public int Port { get; private set; }
         private Socket listener;
 
@@ -18,7 +20,85 @@ namespace Networking.Server
         public NetworkServer(int port)
         {
             this.Port = port;
-            this.Clients = new List<Socket>();
+            this.Clients = new List<ClientInfo>();
+        }
+
+        private void StartInputThread()
+        {
+            new Thread(() =>
+            {
+                while (true)
+                {
+                    Console.Write("> ");
+                    string input = Console.ReadLine();
+
+                    if (input.Equals("list"))
+                    {
+                        Console.WriteLine("--------Clients--------");
+                        for (int i = 0; i < this.Clients.Count; i++)
+                        {
+                            IPEndPoint endpoint = this.Clients[i].Client.RemoteEndPoint as IPEndPoint;
+
+                            Console.WriteLine($"{endpoint.Address.ToString()}:{endpoint.Port.ToString()}");
+                        }
+                        Console.WriteLine("-----------------------");
+                        Console.WriteLine("Count: " + this.Clients.Count);
+                        Console.WriteLine("-----------------------");
+                    }
+                    else if (input.Equals("dlist"))
+                    {
+                        Console.WriteLine("--------DLIST--------");
+                        for (int i = 0; i < this.Clients.Count; i++)
+                        {
+                            IPEndPoint endpoint = this.Clients[i].Client.RemoteEndPoint as IPEndPoint;
+
+                            Console.WriteLine($"{endpoint.Address.ToString()}:{endpoint.Port.ToString()}\tSeconds until timeout: {(KEEPALIVE_TIMEOUT - (Environment.TickCount - this.Clients[i].LastKeepAlive)) / 1000 }");
+                        }
+                        Console.WriteLine("-----------------------");
+                        Console.WriteLine("Client-Count: " + this.Clients.Count);
+                        Console.WriteLine("-----------------------");
+                    }
+                    else if (input.Equals("help"))
+                    {
+                        Console.WriteLine("-----HELP-----");
+                        Console.WriteLine("list - lists all the clients connected.");
+                        Console.WriteLine("dlist - detailed list of all the clients connected.");
+                        Console.WriteLine("clear - clears the screen");
+                        Console.WriteLine("exit - shutsdown the server");
+                    }
+                    else if (input.Equals("clear"))
+                    {
+                        Console.Clear();
+                    }
+                    else if (input.Equals("exit"))
+                    {
+                        Environment.Exit(0);
+                    }
+                }
+            }).Start();
+        }
+
+        private void StartTimeOutCheckerThread()
+        {
+            new Thread(() =>
+            {
+                while (true)
+                {
+                    lock (Clients)
+                    {
+                        for (int i = 0; i < this.Clients.Count; i++)
+                        {
+                            if (Environment.TickCount - Clients[i].LastKeepAlive > KEEPALIVE_TIMEOUT)
+                            {
+                                DisconnectClientFromList(Clients[i].Client);
+                            }
+                        }
+                    }
+
+                    Thread.Sleep(250);
+                }
+
+            }).Start();
         }
 
         public void Start()
@@ -26,13 +106,13 @@ namespace Networking.Server
             IPAddress ip = Dns.Resolve(Dns.GetHostName()).AddressList[0];
             IPEndPoint localEndPoint = new IPEndPoint(ip, this.Port);
             Console.WriteLine("Starting server on: " + ip.ToString() + ":" + this.Port);
-
             this.listener = new Socket(ip.AddressFamily,
                 SocketType.Stream, ProtocolType.Tcp);
             this.listener.Bind(localEndPoint);
             this.listener.Listen(100);
             Console.WriteLine("Waiting for clients to connect...");
-
+            StartInputThread();
+            StartTimeOutCheckerThread();
             while (true)
             {
                 allDone.Reset();
@@ -53,7 +133,7 @@ namespace Networking.Server
                 bool found = false;
                 for (int i = 0; i < this.Clients.Count; i++)
                 {
-                    IPEndPoint remote = this.Clients[i].RemoteEndPoint as IPEndPoint;
+                    IPEndPoint remote = this.Clients[i].Client.RemoteEndPoint as IPEndPoint;
 
                     if ((remote?.Address.ToString() == (clientSocket.RemoteEndPoint as IPEndPoint)?.Address.ToString()))
                     {
@@ -64,13 +144,19 @@ namespace Networking.Server
 
                 if (found)
                 {
+                    clientSocket.Close();
                     allDone.Set();
                     return;
                 }
             }
 
-            this.Clients.Add(clientSocket);
+            lock (this.Clients)
+            {
+                clientInfo.LastKeepAlive = Environment.TickCount;
+                this.Clients.Add(clientInfo);
+            }
 
+            Console.WriteLine("\n[Server] Client connected: " + ((IPEndPoint)clientSocket.RemoteEndPoint).Address);
             clientSocket.BeginReceive(clientInfo.buffer, 0, ClientInfo.BufferSize, 0,
                new AsyncCallback(ReadCallBack), clientInfo);
 
@@ -83,20 +169,25 @@ namespace Networking.Server
 
             ClientInfo clientInfo = (ClientInfo)res.AsyncState;
             Socket clientSocket = clientInfo.Client;
+
             try
             {
                 int bytesRead = clientSocket.EndReceive(res);
                 if (bytesRead > 0)
                 {
-                    Console.WriteLine("[Server] Client connected: " + ((IPEndPoint)clientSocket.RemoteEndPoint).Address);
                     clientInfo.sb.Append(Encoding.ASCII.GetString(
                         clientInfo.buffer, 0, bytesRead));
 
                     content = clientInfo.sb.ToString();
                     if (!string.IsNullOrEmpty(content))
                     {
+                        HandlePacket(content, clientInfo);
+
                         Console.WriteLine($"[{((IPEndPoint)clientInfo.Client.RemoteEndPoint).Address}:{((IPEndPoint)clientInfo.Client.RemoteEndPoint).Port}] {content}");
                     }
+
+                    clientInfo.buffer = new byte[ClientInfo.BufferSize];
+                    clientInfo.sb.Clear();
 
                     clientSocket.BeginReceive(clientInfo.buffer, 0, ClientInfo.BufferSize, 0,
                    new AsyncCallback(ReadCallBack), clientInfo);
@@ -110,24 +201,41 @@ namespace Networking.Server
             {
                 DisconnectClientFromList(clientSocket);
             }
-            Console.WriteLine("[Server] Current clients connected: " + this.Clients.Count);
+            Console.WriteLine("\n[Server] Current clients connected: " + this.Clients.Count);
+        }
+
+        private void HandlePacket(string packet, ClientInfo clientInfo)
+        {
+            if (packet.Equals("keep-alive"))
+            {
+                clientInfo.LastKeepAlive = Environment.TickCount;
+            }
         }
 
         private void DisconnectClientFromList(Socket clientSocket)
         {
-            for (int i = 0; i < this.Clients.Count; i++)
+            try
             {
-                IPEndPoint remote = this.Clients[i].RemoteEndPoint as IPEndPoint;
+                IPEndPoint ep = clientSocket.RemoteEndPoint as IPEndPoint;
+            }
+            catch (Exception)
+            {
+                return;
+            }
 
-                if (remote?.Address.ToString() == (clientSocket.RemoteEndPoint as IPEndPoint)?.Address.ToString())
+            lock (Clients)
+            {
+                for (int i = 0; i < this.Clients.Count; i++)
                 {
-                    this.Clients.RemoveAt(i);
-                    Console.WriteLine("[Server] Client disconnected: " + ((IPEndPoint)clientSocket.RemoteEndPoint).Address + ":" + ((IPEndPoint)clientSocket.RemoteEndPoint).Port);
-                    clientSocket.Close();
+                    if ((Clients[i].Client.RemoteEndPoint as IPEndPoint)?.Address.ToString() == (clientSocket.RemoteEndPoint as IPEndPoint)?.Address.ToString())
+                    {
+                        this.Clients.RemoveAt(i);
+                        Console.WriteLine("\n[Server] Client disconnected: " + ((IPEndPoint)clientSocket.RemoteEndPoint).Address + ":" + ((IPEndPoint)clientSocket.RemoteEndPoint).Port);
+                        clientSocket.Close();
+                    }
                 }
             }
         }
-
 
         private void Send(Socket handler, String data)
         {
@@ -144,14 +252,14 @@ namespace Networking.Server
                 Socket handler = (Socket)ar.AsyncState;
 
                 int bytesSent = handler.EndSend(ar);
-                Console.WriteLine("[Server] Sent {0} bytes to client.", bytesSent);
+                Console.WriteLine("\n[Server] Sent {0} bytes to client.", bytesSent);
 
                 handler.Shutdown(SocketShutdown.Both);
                 handler.Close();
             }
             catch (Exception e)
             {
-                Console.WriteLine("[Server]" + " " + e.ToString());
+                Console.WriteLine("\n[Server]" + " " + e.ToString());
             }
         }
 
