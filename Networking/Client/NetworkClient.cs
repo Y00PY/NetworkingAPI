@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Net.Sockets;
 using System.Net;
+using System.IO;
 
 namespace Networking.Client
 {
@@ -19,6 +20,17 @@ namespace Networking.Client
             this.tcpClient = new TcpClient();
             this.iPAddress = IPAddress.Parse(ip);
             this.Port = port;
+        }
+
+        public void Read()
+        {
+            byte[] bytes = new byte[tcpClient.ReceiveBufferSize];
+
+            tcpClient.GetStream().Read(bytes, 0, (int)tcpClient.ReceiveBufferSize);
+
+            string returndata = Encoding.UTF8.GetString(bytes);
+
+            Console.WriteLine("[READ] Response: " + returndata);
         }
 
         public void Connect()
@@ -49,8 +61,11 @@ namespace Networking.Client
             {
                 try
                 {
-                    this.tcpClient.GetStream().Write(buffer, 0, buffer.Length);
-                    this.tcpClient.GetStream().Flush();
+                    BinaryWriter writer = new BinaryWriter(tcpClient.GetStream());
+                    writer.Write(Encoding.Default.GetString(buffer));
+                    writer.Flush();
+                    //this.tcpClient.GetStream().Write(buffer, 0, buffer.Length);
+                    //this.tcpClient.GetStream().Flush();
                     return true;
                 }
                 catch (Exception)

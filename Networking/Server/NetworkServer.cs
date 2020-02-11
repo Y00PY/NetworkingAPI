@@ -399,6 +399,7 @@ namespace Networking.Server
 
         #region PacketHandling
 
+
         private void HandlePacket(string packet, ClientInfo clientInfo)
         {
             if (packet.Equals("keep-alive"))

@@ -12,28 +12,48 @@ namespace NetworkingTest
     {
         static void Main(string[] args)
         {
-            new Thread(() =>
-            {
-                new NetworkServer(1337, 10000).Start();
-            }).Start();
 
+
+            /*  new Thread(() =>
+              {
+                  new NetworkServer(1337, 10000).Start();
+              }).Start();
+             
             new Thread(() =>
             {
                 while (true)
                 {
                     try
                     {
-                        NetworkClient client = new NetworkClient("10.9.242.100", 1337);
+                        NetworkClient client = new NetworkClient("192.168.28.203", 10001);
                         client.Connect();
+
 
                         while (true)
                         {
-                            Thread.Sleep(5000);
+                            client.Read();
 
-                            if (!client.Send(Encoding.ASCII.GetBytes("keep-alive")))
+
+                            Thread.Sleep(500);
+
+                            if (!client.Send(Encoding.ASCII.GetBytes(@"{
+                              ""type"": ""Auth"",
+                              ""data"": {
+                                ""nickname"": ""lmao"",
+                                ""uuid"": ""abcd""
+                                     }
+                                }
+                        ".Replace("lmao", new Random().Next().ToString() + "ALKDSAWSd").Replace("abcd", Guid.NewGuid().ToString()))))
                             {
                                 client.Disconnect();
                                 break;
+                            }
+                            else
+                            {
+                                Thread.Sleep(1000);
+
+
+                                Console.WriteLine("package sent");
                             }
                         }
                     }
@@ -45,6 +65,6 @@ namespace NetworkingTest
             {
                 Thread.Sleep(500);
             }
-        }
+        }*/
     }
 }
